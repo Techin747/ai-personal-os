@@ -1,6 +1,7 @@
-flask
-gunicorn
-line-bot-sdk
-google-generativeai
+Flask==3.0.2
+line-bot-sdk==2.4.0
+google-generativeai==0.4.0
+gunicorn==21.2.0
+
 
 

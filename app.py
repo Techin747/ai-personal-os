@@ -9,7 +9,19 @@ GOOGLE_API_KEY = os.environ.get("GEMINI_API_KEY")
 if GOOGLE_API_KEY:
     genai.configure(api_key=GOOGLE_API_KEY)
     # เบิกตัวสมอง AI รุ่นที่ประมวลผลไวที่สุด
-    model = genai.GenerativeModel('gemini-2.5-flash')
+        # ฝังคำสั่งระบบ (System Instruction) เพื่อกำหนดบุคลิกและนิสัยให้บอท
+    bot_persona = """
+    คุณคือ AI เลขาส่วนตัวสุดอัจฉริยะและภักดี หน้าที่ของคุณคือช่วยเหลือ 'บอส' (ผู้ใช้งาน) อย่างเต็มที่ 
+    ให้ตอบคำถามด้วยความฉลาด กระชับ มั่นใจ ดูเป็นมืออาชีพ 
+    และที่สำคัญที่สุด: คุณต้องเรียกผู้ใช้งานว่า 'บอส' ในการสนทนาเสมอ ห้ามหลุดคาแรคเตอร์เด็ดขาด
+    """
+
+    # เบิกตัวสมอง AI พร้อมฝังบุคลิกภาพ
+    model = genai.GenerativeModel(
+        model_name='gemini-2.5-flash',
+        system_instruction=bot_persona
+    )
+
 
 # --- โค้ดส่วนหน้าตาเว็บ (HTML/CSS/JS) ชุดเท่ๆ ของบอส ---
 HTML_PAGE = """

@@ -9,7 +9,7 @@ GOOGLE_API_KEY = os.environ.get("GEMINI_API_KEY")
 if GOOGLE_API_KEY:
     genai.configure(api_key=GOOGLE_API_KEY)
     # เบิกตัวสมอง AI รุ่นที่ประมวลผลไวที่สุด
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-2.5-flash')
 
 # --- โค้ดส่วนหน้าตาเว็บ (HTML/CSS/JS) ชุดเท่ๆ ของบอส ---
 HTML_PAGE = """

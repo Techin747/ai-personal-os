@@ -1,8 +1,8 @@
 Flask
-line-bot-sdk
-google-generativeai
+requests
+google-api-python-client
+google-auth
+google-auth-oauthlib
 gunicorn
-
-
 
 

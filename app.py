@@ -3,37 +3,57 @@ from flask import Flask, request, jsonify, render_template_string
 app = Flask(__name__)
 
 # --- โค้ดส่วนหน้าตาเว็บ (HTML/CSS/JS) ---
+# เราจะใช้สี Charcoal Grey (#1F2937), Deep Navy (#111827), Slate Blue (#4B5563) และ Electric Blue (#3B82F6) 
+# เป็นหลักเพื่อความเท่ ทันสมัย และสมาร์ท
+
 HTML_PAGE = """
 <!DOCTYPE html>
 <html lang="th">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My AI OS</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>My AI Assistant</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f2f5; margin: 0; padding: 0; display: flex; justify-content: center; height: 100vh; }
-        #chat-container { width: 100%; max-width: 600px; background: white; display: flex; flex-direction: column; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
-        #header { background: #1e293b; color: white; padding: 20px; text-align: center; font-size: 1.5em; font-weight: bold; border-bottom: 3px solid #3b82f6; }
-        #messages { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; }
-        .msg { padding: 12px 18px; border-radius: 20px; max-width: 80%; font-size: 1.1em; line-height: 1.5; word-wrap: break-word; }
-        .user-msg { background: #3b82f6; color: white; align-self: flex-end; border-bottom-right-radius: 5px; }
-        .ai-msg { background: #f1f5f9; color: #334155; align-self: flex-start; border-bottom-left-radius: 5px; border: 1px solid #e2e8f0; }
-        #input-area { display: flex; padding: 15px; background: white; border-top: 1px solid #e2e8f0; }
-        #user-input { flex: 1; padding: 15px; border: 1px solid #cbd5e1; border-radius: 25px; font-size: 1.1em; outline: none; transition: border-color 0.3s; }
-        #user-input:focus { border-color: #3b82f6; }
-        #send-btn { background: #3b82f6; color: white; border: none; padding: 0 25px; margin-left: 10px; border-radius: 25px; cursor: pointer; font-size: 1.1em; font-weight: bold; transition: background 0.3s; }
-        #send-btn:hover { background: #2563eb; }
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background-color: #111827; margin: 0; padding: 0; display: flex; justify-content: center; height: 100vh; overflow: hidden; }
+        #chat-container { width: 100%; max-width: 800px; background: #1F2937; display: flex; flex-direction: column; box-shadow: 0 10px 30px rgba(0,0,0,0.3); border: 1px solid #374151; }
+        #header { background: #1F2937; color: white; padding: 15px 20px; text-align: left; font-size: 1.3em; font-weight: 600; border-bottom: 2px solid #3B82F6; display: flex; align-items: center; justify-content: space-between; }
+        #header h1 { margin: 0; font-size: 1.1em; }
+        #header .status { font-size: 0.8em; color: #10B981; margin-left: 10px; }
+        #messages { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; background: #111827; }
+        
+        .msg-row { display: flex; align-items: flex-end; }
+        .user-row { justify-content: flex-end; }
+        .ai-row { justify-content: flex-start; }
+        
+        .msg { padding: 10px 15px; border-radius: 12px; max-width: 70%; font-size: 1.1em; line-height: 1.4; word-wrap: break-word; }
+        .user-msg { background: #3B82F6; color: white; border-bottom-right-radius: 4px; margin-right: 5px; }
+        .ai-msg { background: #374151; color: #E5E7EB; border-bottom-left-radius: 4px; margin-left: 5px; }
+        
+        #input-area { display: flex; padding: 10px 15px; background: #1F2937; border-top: 1px solid #374151; align-items: center; }
+        #user-input { flex: 1; padding: 12px 18px; background: #374151; border: 1px solid #4B5563; border-radius: 20px; font-size: 1.1em; color: white; outline: none; transition: border-color 0.3s, background-color 0.3s; }
+        #user-input:focus { border-color: #3B82F6; background-color: #4B5563; }
+        #send-btn { background: #3B82F6; color: white; border: none; padding: 12px 20px; margin-left: 10px; border-radius: 20px; cursor: pointer; font-size: 1em; font-weight: 600; transition: background 0.3s, transform 0.2s; }
+        #send-btn:hover { background: #2563EB; transform: scale(1.05); }
     </style>
 </head>
 <body>
     <div id="chat-container">
-        <div id="header">🤖 My AI Secretary</div>
+        <div id="header">
+            <div>
+                <h1>🤖 AI Assistant</h1>
+                <div class="status">● Online</div>
+            </div>
+            <div style="font-size: 0.9em; color: #9CA3AF;">PERSONAL OS</div>
+        </div>
         <div id="messages">
-            <div class="msg ai-msg">สวัสดีครับบอส! ระบบแชทส่วนตัวพร้อมใช้งานแล้ว วันนี้มีอะไรให้ผมช่วยไหมครับ?</div>
+            <div class="msg-row ai-row">
+                <div class="msg ai-msg">สวัสดีครับบอส! ผมJarvis เลขาส่วนตัวของคุณ วันนี้มีภารกิจอะไรให้ผมช่วยไหมครับ?</div>
+            </div>
         </div>
         <div id="input-area">
-            <input type="text" id="user-input" placeholder="พิมพ์สั่งงานที่นี่..." onkeypress="handleKeyPress(event)">
-            <button id="send-btn" onclick="sendMessage()">ส่ง</button>
+            <input type="text" id="user-input" placeholder="พิมพ์คำสั่งเพื่อสั่งงาน..." onkeypress="handleKeyPress(event)">
+            <button id="send-btn" onclick="sendMessage()">สั่งงาน</button>
         </div>
     </div>
 
@@ -47,12 +67,16 @@ HTML_PAGE = """
             const text = input.value.trim();
             if (!text) return;
 
-            appendMessage(text, 'user-msg');
+            appendMessage(text, 'user-row', 'user-msg');
             input.value = '';
 
             const msgsDiv = document.getElementById('messages');
             const loadingId = 'loading-' + Date.now();
-            msgsDiv.innerHTML += `<div id="${loadingId}" class="msg ai-msg">กำลังคิด... 🧠</div>`;
+            msgsDiv.innerHTML += `
+                <div id="${loadingId}" class="msg-row ai-row">
+                    <div class="msg ai-msg">กำลังคิด... 🧠</div>
+                </div>
+            `;
             msgsDiv.scrollTop = msgsDiv.scrollHeight;
 
             try {
@@ -64,16 +88,20 @@ HTML_PAGE = """
                 const data = await response.json();
                 
                 document.getElementById(loadingId).remove();
-                appendMessage(data.reply, 'ai-msg');
+                appendMessage(data.reply, 'ai-row', 'ai-msg');
             } catch (err) {
                 document.getElementById(loadingId).remove();
-                appendMessage('ขออภัยครับ ระบบมีปัญหาการเชื่อมต่อ', 'ai-msg');
+                appendMessage('ขออภัยครับ ระบบมีปัญหาการเชื่อมต่อ', 'ai-row', 'ai-msg');
             }
         }
 
-        function appendMessage(text, className) {
+        function appendMessage(text, rowClassName, msgClassName) {
             const msgsDiv = document.getElementById('messages');
-            msgsDiv.innerHTML += `<div class="msg ${className}">${text}</div>`;
+            msgsDiv.innerHTML += `
+                <div class="msg-row ${rowClassName}">
+                    <div class="msg ${msgClassName}">${text}</div>
+                </div>
+            `;
             msgsDiv.scrollTop = msgsDiv.scrollHeight;
         }
     </script>
@@ -97,7 +125,8 @@ def api_chat():
     print(f"Boss says: {user_message}")
     
     # ตอนนี้บอทยังไม่มีสมอง AI ให้มันตอบกลับแบบทวนคำสั่งไปก่อน
-    reply = f"รับทราบครับบอส! บอสพิมพ์มาว่า: '{user_message}' (ระบบกำลังรอเชื่อมต่อสมอง AI ในสเตปต่อไปครับ 🚀)"
+    # เราจะปรับคำตอบของมันให้ดูสมาร์ทขึ้นอีกนิด
+    reply = f"รับทราบครับบอส! ผมกำลังรอสมอง AI เพื่อมาวิเคราะห์คำสั่งของบอส: '{user_message}' สเตปต่อไปผมจะไปเชื่อมต่อสมอง AI มาให้ครับ 🚀"
     
     return jsonify({"reply": reply})
 

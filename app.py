@@ -1,98 +1,139 @@
 import os
+import json
 import datetime
+import google.generativeai as genai
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage
-import google.generativeai as genai
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
 
 app = Flask(__name__)
 
-# -----------------------------
-# 1. เชื่อมต่อระบบ
-# -----------------------------
+# ==========================
+# 1️⃣ CONNECT SYSTEM
+# ==========================
 
 line_bot_api = LineBotApi(os.getenv('LINE_CHANNEL_ACCESS_TOKEN'))
 handler = WebhookHandler(os.getenv('LINE_CHANNEL_SECRET'))
 genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
 
-# -----------------------------
-# 2. ตั้งค่านิสัย Life OS
-# -----------------------------
+# ==========================
+# 2️⃣ CHARACTER SYSTEM
+# ==========================
 
 character_setting = """
-คุณคือ "Life OS" เลขาส่วนตัว AI อัจฉริยะของบอส
-
-บุคลิกภาพ:
+คุณคือ "Life OS" เลขาส่วนตัว AI ของบอส
 - เรียกผู้ใช้ว่า "บอส"
 - แทนตัวเองว่า "หนู"
-- สุภาพ ลงท้ายด้วย คะ/ค่ะ
-- มีความขี้เล่น อ่อนหวาน
-- ถ้าเกี่ยวกับสุขภาพให้ดุจริงจัง
-- พร้อมช่วยวางแผนชีวิตและสรุปงาน
+- สุภาพ ลงท้าย คะ/ค่ะ
+- ขี้เล่นเล็กน้อย
+- ดุทันทีถ้าเกี่ยวกับสุขภาพ
+- ช่วยจัดการงาน วางแผนชีวิต
 """
 
-model = genai.GenerativeModel(
+chat_model = genai.GenerativeModel(
     model_name="gemini-2.5-flash",
     system_instruction=character_setting
 )
 
-# -----------------------------
-# 3. Memory System
-# -----------------------------
+# ==========================
+# 3️⃣ MEMORY + TODO
+# ==========================
 
 chat_sessions = {}
-
-# -----------------------------
-# 4. ระบบ To-do
-# -----------------------------
-
 todo_database = {}
 
 def add_todo(user_id, task):
     if user_id not in todo_database:
         todo_database[user_id] = []
-    todo_database[user_id].append({
-        "task": task,
-        "created": datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-    })
+    todo_database[user_id].append(task)
 
 def list_todo(user_id):
     if user_id not in todo_database or not todo_database[user_id]:
         return "วันนี้บอสยังไม่มีงานเลยค่ะ 🥹"
-
     text = "📋 งานของบอส:\n"
-    for i, item in enumerate(todo_database[user_id], 1):
-        text += f"{i}. {item['task']} (เพิ่มเมื่อ {item['created']})\n"
+    for i, task in enumerate(todo_database[user_id], 1):
+        text += f"{i}. {task}\n"
     return text
 
-def clear_todo(user_id):
-    todo_database[user_id] = []
+# ==========================
+# 4️⃣ CALENDAR AI PARSER
+# ==========================
 
-def remove_todo(user_id, index):
-    if user_id in todo_database and 0 <= index < len(todo_database[user_id]):
-        todo_database[user_id].pop(index)
-        return True
-    return False
+calendar_prompt = """
+แปลงข้อความภาษาไทยเป็น JSON สำหรับ Google Calendar
+ตอบเป็น JSON เท่านั้น
 
-# -----------------------------
-# 5. Health Strict Mode
-# -----------------------------
+รูปแบบ:
+{
+  "summary": "...",
+  "date": "YYYY-MM-DD",
+  "start_time": "HH:MM",
+  "end_time": "HH:MM"
+}
 
-def health_check(text):
-    keywords = ["นอนดึก", "อดนอน", "ทำงานหนัก", "ลืมกินข้าว", "ไม่พัก"]
-    for word in keywords:
-        if word in text:
-            return True
-    return False
+วันนี้คือ {today}
+timezone: Asia/Bangkok
+"""
 
-# -----------------------------
-# 6. Routes
-# -----------------------------
+def parse_event(text):
+    today = datetime.date.today().isoformat()
+    prompt = calendar_prompt.format(today=today) + "\nข้อความ: " + text
+
+    model = genai.GenerativeModel("gemini-2.5-flash")
+    response = model.generate_content(prompt)
+
+    try:
+        return json.loads(response.text)
+    except:
+        return None
+
+def create_calendar_event(data):
+    creds = Credentials(
+        None,
+        refresh_token=os.getenv("GOOGLE_REFRESH_TOKEN"),
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=os.getenv("GOOGLE_CLIENT_ID"),
+        client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
+        scopes=["https://www.googleapis.com/auth/calendar"]
+    )
+
+    service = build("calendar", "v3", credentials=creds)
+
+    start_datetime = f"{data['date']}T{data['start_time']}:00"
+    end_datetime = f"{data['date']}T{data['end_time']}:00"
+
+    event = {
+        "summary": data["summary"],
+        "start": {
+            "dateTime": start_datetime,
+            "timeZone": "Asia/Bangkok",
+        },
+        "end": {
+            "dateTime": end_datetime,
+            "timeZone": "Asia/Bangkok",
+        },
+    }
+
+    return service.events().insert(calendarId="primary", body=event).execute()
+
+# ==========================
+# 5️⃣ HEALTH CHECK
+# ==========================
+
+def health_alert(text):
+    words = ["นอนดึก", "อดนอน", "ทำงานหนัก", "ลืมกินข้าว"]
+    return any(w in text for w in words)
+
+# ==========================
+# 6️⃣ ROUTES
+# ==========================
 
 @app.route("/", methods=['GET'])
 def index():
-    return "Life OS is online and ready to serve you, Boss!"
+    return "Life OS is running..."
 
 @app.route("/callback", methods=['POST'])
 def callback():
@@ -106,9 +147,9 @@ def callback():
 
     return 'OK'
 
-# -----------------------------
-# 7. Main Brain
-# -----------------------------
+# ==========================
+# 7️⃣ MAIN BRAIN
+# ==========================
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
@@ -118,50 +159,42 @@ def handle_message(event):
 
     try:
 
-        # -------- Special Commands --------
+        # -------- TODO COMMAND --------
 
         if lower_text.startswith("/add "):
             task = user_text[5:]
             add_todo(user_id, task)
-            reply = f"รับทราบค่ะบอส ✍️ หนูเพิ่มงาน '{task}' แล้วนะคะ"
+            reply = f"รับทราบค่ะบอส ✍️ หนูเพิ่มงาน '{task}' แล้วค่ะ"
 
         elif lower_text == "/list":
             reply = list_todo(user_id)
 
-        elif lower_text.startswith("/remove "):
-            try:
-                index = int(lower_text.replace("/remove ", "")) - 1
-                if remove_todo(user_id, index):
-                    reply = "หนูลบงานให้แล้วค่ะบอส ✨"
-                else:
-                    reply = "ลำดับไม่ถูกต้องนะคะบอส 🥺"
-            except:
-                reply = "บอสพิมพ์ลำดับงานไม่ถูกต้องค่ะ"
+        # -------- HEALTH MODE --------
 
-        elif lower_text == "/clear":
-            clear_todo(user_id)
-            reply = "หนูล้างงานทั้งหมดแล้วค่ะบอส ✨"
+        elif health_alert(lower_text):
+            reply = "บอสคะ 😠 สุขภาพสำคัญที่สุดนะคะ ไปพักเดี๋ยวนี้เลยค่ะ!"
 
-        elif lower_text == "/today":
-            today = datetime.datetime.now().strftime("%A %d %B %Y")
-            reply = f"วันนี้คือ {today} ค่ะบอส 🌤️\n" + list_todo(user_id)
-
-        # -------- Health Strict Mode --------
-
-        elif health_check(lower_text):
-            reply = "บอสคะ 😠 สุขภาพสำคัญที่สุดนะคะ! ไปพักเดี๋ยวนี้เลยค่ะ!"
-
-        # -------- AI Chat Mode --------
+        # -------- NATURAL LANGUAGE CALENDAR --------
 
         else:
-            if user_id not in chat_sessions:
-                chat_sessions[user_id] = model.start_chat(history=[])
+            time_keywords = ["พรุ่งนี้", "วันนี้", "โมง", "บ่าย", "เช้า", "เย็น", "ประชุม"]
 
-            chat = chat_sessions[user_id]
-            response = chat.send_message(user_text)
-            reply = response.text
+            if any(word in lower_text for word in time_keywords):
+                event_data = parse_event(user_text)
 
-        # -------- Reply --------
+                if event_data:
+                    event = create_calendar_event(event_data)
+                    reply = f"บอสคะ ✨ หนูจด '{event_data['summary']}' ให้แล้วค่ะ\n{event.get('htmlLink')}"
+                else:
+                    reply = "หนูตีความเวลาไม่ออกค่ะบอส 🥺"
+
+            else:
+                if user_id not in chat_sessions:
+                    chat_sessions[user_id] = chat_model.start_chat(history=[])
+
+                chat = chat_sessions[user_id]
+                response = chat.send_message(user_text)
+                reply = response.text
 
         line_bot_api.reply_message(
             event.reply_token,
@@ -172,12 +205,12 @@ def handle_message(event):
         print("Error:", e)
         line_bot_api.reply_message(
             event.reply_token,
-            TextSendMessage(text="ขอโทษนะคะบอส สมองหนูรวนนิดหน่อย 🥺")
+            TextSendMessage(text="ขอโทษนะคะบอส สมองหนูรวนค่ะ 🥺")
         )
 
-# -----------------------------
-# 8. Run Server
-# -----------------------------
+# ==========================
+# 8️⃣ RUN SERVER
+# ==========================
 
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 10000))
